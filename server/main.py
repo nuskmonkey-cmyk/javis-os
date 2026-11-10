@@ -303,7 +303,9 @@ if (os.getenv("JAVIS_DEV_CORS", "") or "").strip().lower() in ("1", "true", "yes
 # 2026-11-05 audit: "/static" and "/health" had no trailing slash, the same trap as "/s" above. "/health" opened
 # /health/loop (stack traces, server paths, restart history) and would open any later /health* or /static* route.
 # The probe stays public as an exact path; the static mount keeps its prefix WITH the slash.
-_AUTH_PUBLIC_PREFIX = ("/static/", "/s/", "/hooks/")
+# "/chatbot-api/v1/training/": the opt-in training snapshot routes (training_snapshot_wiring.py). Called by a
+# server with an API channel key and no cookie, like /chatbot-api/v1/turn; each route runs channels.api.gate itself.
+_AUTH_PUBLIC_PREFIX = ("/static/", "/s/", "/hooks/", "/chatbot-api/v1/training/")
 # /brand-logo: hiện trên màn đăng nhập (trước session). /tls-check: Caddy gọi (không đăng nhập được).
 _AUTH_PUBLIC_EXACT = ("/", "/favicon.ico", "/health", "/auth/status", "/auth/login", "/auth/setup",
                       # /robots.txt (2026-11-09): crawlers must read it with no session, see bot_shield.py.
@@ -27510,6 +27512,12 @@ async def whatsapp_webhook(request: Request):
     # Answer 200 right away (Meta retries anything slower); the messages run as tasks.
     n = await whatsapp_bot.handle_webhook(payload)
     return {"ok": True, "messages": n}
+
+
+# Opt-in frozen training runtime (off unless JAVIS_TRAINING_SNAPSHOTS_ENABLED=true); every route authenticates through
+# the API channel gate. The ordinary turn route below is unchanged.
+from training_snapshot_wiring import register_main as _register_training_snapshots  # noqa: E402
+_register_training_snapshots(globals())
 
 
 @app.post("/chatbot-api/v1/turn")
